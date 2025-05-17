@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'health_check.storage',  
     'corsheaders',
     'user',
+    'finances',
 ]
 
 AUTH_USER_MODEL = 'user.User'
