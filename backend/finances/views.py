@@ -1,7 +1,13 @@
 from rest_framework import viewsets, permissions
+from django.http import StreamingHttpResponse
+from rest_framework.decorators import action
 from .models import Category, Transaction, Goal
 from .serializers import CategorySerializer, TransactionSerializer, GoalSerializer
-from .services import parse_transaction_text, parse_goal_text
+from .services import parse_transaction_text, parse_goal_text, generate_transactions_csv, generate_30day_report, generate_transactions_pdf
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.http import FileResponse
+
 
 class CategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
@@ -40,6 +46,45 @@ class TransactionViewSet(viewsets.ModelViewSet):
             amount=parsed.get('amount') or serializer.validated_data['amount'],
             metadata=parsed
         )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_csv(self, request):
+        """
+        GET /finances/transactions/export_csv/
+        Retorna todas as transações do usuário em CSV.
+        """
+        buffer = generate_transactions_csv(request.user)
+        resp = StreamingHttpResponse(
+            buffer,
+            content_type='text/csv'
+        )
+        resp['Content-Disposition'] = (
+            f'attachment; filename="transactions_{request.user.id}.csv"'
+        )
+        return resp
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_pdf(self, request):
+        """
+        GET /finances/transactions/export_pdf/
+        Retorna um PDF com tabela de transações.
+        """
+        buffer = generate_transactions_pdf(request.user)
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=f"transactions_{request.user.id}.pdf",
+            content_type='application/pdf'
+        )
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def report_30days(self, request):
+        """
+        GET /finances/transactions/report_30days/
+        Retorna JSON com resumo do mês passado.
+        """
+        data = generate_30day_report(request.user)
+        return Response(data)
 
 class GoalViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]

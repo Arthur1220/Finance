@@ -10,9 +10,6 @@ python manage.py migrate
 echo "Aguardando 5 segundos para garantir que as migrações estejam finalizadas..."
 sleep 5
 
-echo "Carregando fixtures..."
-/code/load_fixtures.sh
-
 echo "Aguardando 5 segundos antes de criar o superusuário..."
 sleep 5
 

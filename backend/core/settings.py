@@ -12,6 +12,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import os
+from core.config import GOOGLE_API_KEY
+
+if GOOGLE_API_KEY:
+    os.environ.setdefault('GOOGLE_API_KEY', GOOGLE_API_KEY)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,9 +49,10 @@ INSTALLED_APPS = [
     'drf_spectacular_sidecar',
     'simple_history',
     'health_check',           
-    'health_check.db',        
+    'health_check.db',         
     'health_check.cache',     
     'health_check.storage',  
+    'core.apps.CoreConfig',
     'corsheaders',
     'user',
     'finances',

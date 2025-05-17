@@ -1,6 +1,17 @@
 import os, json
 from google import genai
 from google.genai import types
+import csv
+from io import StringIO
+from .models import Transaction
+from django.db.models import Sum, Count
+from datetime import timedelta
+from django.utils import timezone
+from django.http import FileResponse
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib import colors
 
 MODEL_ID = 'gemini-2.0-flash'
 
@@ -89,3 +100,90 @@ def parse_goal_text(raw_text: str) -> dict:
             'frequency': None,
             'name': None
         }
+    
+def generate_transactions_csv(user):
+    """
+    Retorna um buffer CSV com todas as transações do usuário.
+    """
+    qs = Transaction.objects.filter(user=user).order_by('-timestamp')
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    # Cabeçalho
+    writer.writerow(['ID','Data','Categoria','Valor','Tipo','Local','Descrição'])
+    # Linhas
+    for t in qs:
+        writer.writerow([
+            t.id,
+            t.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            t.category.name if t.category else '',
+            f"{t.amount:.2f}",
+            t.metadata.get('type',''),
+            t.metadata.get('location',''),
+            t.raw_text
+        ])
+    buffer.seek(0)
+    return buffer
+
+def generate_30day_report(user):
+    """
+    Retorna um dict com totais de receitas, despesas e por categoria nos últimos 30 dias.
+    """
+    now = timezone.now()
+    since = now - timedelta(days=30)
+    qs = Transaction.objects.filter(user=user, timestamp__gte=since)
+
+    total_expense = qs.filter(metadata__type='expense').aggregate(Sum('amount'))['amount__sum'] or 0
+    total_income  = qs.filter(metadata__type='income').aggregate(Sum('amount'))['amount__sum'] or 0
+
+    by_category = (
+        qs
+        .values('category__name')
+        .annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        )
+        .order_by('-total')
+    )
+
+    return {
+        'period_start': since.date().isoformat(),
+        'period_end': now.date().isoformat(),
+        'total_expense': float(total_expense),
+        'total_income': float(total_income),
+        'by_category': [
+            {
+                'category': entry['category__name'],
+                'total': float(entry['total']),
+                'count': entry['count']
+            }
+            for entry in by_category
+        ]
+    }
+
+
+def generate_transactions_pdf(user):
+    """
+    Gera um PDF com uma tabela das transações do usuário.
+    """
+    qs = Transaction.objects.filter(user=user).order_by('-timestamp')
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    data = [['Data','Categoria','Valor','Tipo','Local','Descrição']]
+    for t in qs:
+        data.append([
+            t.timestamp.strftime('%Y-%m-%d'),
+            t.category.name if t.category else '',
+            f"{t.amount:.2f}",
+            t.metadata.get('type',''),
+            t.metadata.get('location',''),
+            t.raw_text[:30] + ('...' if len(t.raw_text)>30 else '')
+        ])
+    table = Table(data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('GRID',       (0,0), (-1,-1), 0.5, colors.grey),
+        ('FONTNAME',   (0,0), (-1,0), 'Helvetica-Bold'),
+    ]))
+    doc.build([table])
+    buffer.seek(0)
+    return buffer
