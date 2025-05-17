@@ -45,7 +45,7 @@ Uma API RESTful para gerenciamento financeiro pessoal, com funcionalidades de:
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/finance.git
+git clone https://github.com/Arthur1220/finance.git
 cd finance/backend
 
 # Crie e ative virtualenv
@@ -66,11 +66,6 @@ Crie um arquivo `.env` na raiz do backend com:
 ```dotenv
 # Chave da API Google Gemini
 GOOGLE_API_KEY=your_gemini_api_key
-
-# Django settings
-DJANGO_SECRET_KEY=suachavesecreta
-DEBUG=True
-DATABASE_URL=sqlite:///db.sqlite3
 ```
 
 O `core/config.py` e o `settings.py` já leem essas variáveis via Pydantic e `os.environ`.
@@ -108,9 +103,7 @@ docker-compose up --build -d
 * **Testes unitários**:
 
   ```bash
-  python manage.py test user
-  python manage.py test finances
-  python manage.py test analysis
+  python manage.py test
   ```
 
 ---
