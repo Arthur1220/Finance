@@ -15,16 +15,3 @@ class UserSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
-    
-class LogoutSerializer(serializers.Serializer):
-    refresh = serializers.CharField()
-
-    def validate(self, attrs):
-        self.refresh = attrs['refresh']
-        return attrs
-    
-    def save(self, **kwargs):
-        try:
-            RefreshToken(self.refresh).blacklist()
-        except TokenError:
-            self.fail('bad_token')

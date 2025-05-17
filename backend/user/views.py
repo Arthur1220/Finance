@@ -5,11 +5,9 @@ from rest_framework.response import Response
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from django.utils import timezone
-
 from .models import User
-from .serializers import UserSerializer, LogoutSerializer
-from .authentication import CookieJWTAuthentication
+from .serializers import UserSerializer
+from core.authentication import CookieJWTAuthentication
 
 
 class UserViewSet(viewsets.GenericViewSet):
