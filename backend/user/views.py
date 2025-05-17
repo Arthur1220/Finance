@@ -76,7 +76,6 @@ class UserViewSet(viewsets.GenericViewSet):
                 'phone': user.phone,
                 'timezone': user.timezone,
                 'currency': user.currency,
-                'user_hash': user.user_hash
             }
         }
         return response
