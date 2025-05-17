@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'user',
     'finances',
+    'analysis',
 ]
 
 AUTH_USER_MODEL = 'user.User'
