@@ -2,6 +2,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
+from unittest.mock import patch
 
 from .models import Category, Transaction, Goal
 
@@ -110,3 +111,33 @@ class FinancesAPITestCase(TestCase):
         # DELETE
         resp = self.client.delete(f'{self.goal_url}{goal_id}/')
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+    @patch('finances.views.parse_transaction_text')
+    def test_transaction_parsing(self, mock_parse):
+        # 1) Configura o retorno do parser
+        mock_parse.return_value = {
+            'amount': 15.0,
+            'date': '2025-05-17',
+            'category': 'Padaria',
+            'location': 'Padaria Central',
+            'type': 'expense'
+        }
+
+        # 2) Chama o endpoint
+        payload = {
+            'raw_text': 'gastei 15 reais na padaria',
+            'amount': '0'
+        }
+        resp = self.client.post(self.trans_url, payload, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        # 3) Verifica que o parser foi chamado
+        mock_parse.assert_called_once_with('gastei 15 reais na padaria')
+
+        # 4) Conferir metadata e amount do parser
+        self.assertEqual(resp.data['metadata'], mock_parse.return_value)
+        self.assertEqual(resp.data['amount'], '15.00')
+
+        # 5) Categoria criada corretamete
+        cat = Category.objects.get(user=self.user, name='Padaria', type='expense')
+        self.assertEqual(resp.data['category'], cat.id)

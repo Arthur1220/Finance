@@ -7,11 +7,16 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ['id','name','type']
 
 class TransactionSerializer(serializers.ModelSerializer):
+    metadata = serializers.JSONField(read_only=True)
+    category = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = Transaction
-        fields = ['id','category','amount','timestamp','raw_text','metadata']
+        fields = ['id','raw_text','amount','timestamp','category','metadata']
+        read_only_fields = ['id','timestamp','category','metadata']
 
 class GoalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Goal
         fields = ['id','name','target_amount','start_date','end_date','frequency','metadata']
+        read_only_fields = ['id','metadata']

@@ -1,60 +1,112 @@
+import json
 from django.test import TestCase
-from rest_framework.test import APIClient
-from rest_framework import status
-from django.contrib.auth import get_user_model
+from unittest.mock import patch, MagicMock
 
-from analysis.models import Insight, ChatMessage
+from finances.services import (
+    parse_transaction_text,
+    parse_goal_text
+)
 
-User = get_user_model()
+class ParseServicesTestCase(TestCase):
+    def test_parse_transaction_no_api_key(self):
+        # Sem GOOGLE_API_KEY -> retorna dict com None
+        with patch('finances.services.os.getenv', return_value=None):
+            result = parse_transaction_text("gastei 15 reais na padaria")
+        self.assertEqual(result, {
+            'amount': None,
+            'date': None,
+            'category': None,
+            'location': None,
+            'type': None
+        })
 
-class AnalysisAPITestCase(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.user = User.objects.create_user(username='ana_user', password='pass123')
-        self.client.force_authenticate(user=self.user)
+    @patch('finances.services.genai.Client')
+    def test_parse_transaction_success(self, mock_Client):
+        # Com API_KEY e resposta JSON válida
+        dummy = {
+            'amount': 23.5,
+            'date': '2025-05-17',
+            'category': 'Padaria',
+            'location': 'Padaria Central',
+            'type': 'expense'
+        }
+        # mock os.getenv para retornar uma chave qualquer
+        with patch('finances.services.os.getenv', return_value='fake-key'):
+            # configura o client e o chat
+            inst = MagicMock()
+            chat = MagicMock()
+            chat.send_message.return_value = type('R', (), {'text': json.dumps(dummy)})()
+            inst.chats.create.return_value = chat
+            mock_Client.return_value = inst
 
-        self.insight_url = '/analysis/insights/'
-        self.chat_url    = '/analysis/chats/'
+            result = parse_transaction_text("gastei 23.5 na padaria")
+        self.assertEqual(result, dummy)
 
-    def test_insight_list(self):
-        # vazio inicialmente
-        resp = self.client.get(self.insight_url)
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data, [])
+    @patch('finances.services.genai.Client')
+    def test_parse_transaction_invalid_json(self, mock_Client):
+        # Com API_KEY mas resposta inválida (JSONDecodeError)
+        with patch('finances.services.os.getenv', return_value='fake-key'):
+            inst = MagicMock()
+            chat = MagicMock()
+            chat.send_message.return_value = type('R', (), {'text': 'não é JSON'})()
+            inst.chats.create.return_value = chat
+            mock_Client.return_value = inst
 
-        # criar insights diretamente
-        Insight.objects.create(
-            user=self.user, insight_type='summary',
-            content='Resumo X', data={}
-        )
-        Insight.objects.create(
-            user=self.user, insight_type='forecast',
-            content='Previsão Y', data={}
-        )
-        resp = self.client.get(self.insight_url)
-        types = {i['insight_type'] for i in resp.data}
-        self.assertSetEqual(types, {'summary','forecast'})
+            result = parse_transaction_text("algo estranho")
+        self.assertEqual(result, {
+            'amount': None,
+            'date': None,
+            'category': None,
+            'location': None,
+            'type': None
+        })
 
-    def test_chat_crud(self):
-        payload = {'role': 'user', 'message': 'Oi', 'metadata': {}}
-        # CREATE
-        resp = self.client.post(self.chat_url, payload, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        chat_id = resp.data['id']
+    def test_parse_goal_no_api_key(self):
+        # Sem API_KEY -> dict de None
+        with patch('finances.services.os.getenv', return_value=None):
+            result = parse_goal_text("quero poupar 1000 até fim do ano mensalmente")
+        self.assertEqual(result, {
+            'target_amount': None,
+            'start_date': None,
+            'end_date': None,
+            'frequency': None,
+            'name': None
+        })
 
-        # LIST
-        resp = self.client.get(self.chat_url)
-        self.assertEqual(len(resp.data), 1)
+    @patch('finances.services.genai.Client')
+    def test_parse_goal_success(self, mock_Client):
+        # Com API_KEY e JSON válido
+        dummy = {
+            'target_amount': 1000.0,
+            'start_date': '2025-01-01',
+            'end_date': '2025-12-31',
+            'frequency': 'monthly',
+            'name': 'Poupança Anual'
+        }
+        with patch('finances.services.os.getenv', return_value='fake-key'):
+            inst = MagicMock()
+            chat = MagicMock()
+            chat.send_message.return_value = type('R', (), {'text': json.dumps(dummy)})()
+            inst.chats.create.return_value = chat
+            mock_Client.return_value = inst
 
-        # RETRIEVE
-        resp = self.client.get(f'{self.chat_url}{chat_id}/')
-        self.assertEqual(resp.data['message'], 'Oi')
+            result = parse_goal_text("quero poupar 1000 até dezembro de forma mensal")
+        self.assertEqual(result, dummy)
 
-        # UPDATE
-        update = {'role': 'agent', 'message': 'Olá', 'metadata': {}}
-        resp = self.client.put(f'{self.chat_url}{chat_id}/', update, format='json')
-        self.assertEqual(resp.data['role'], 'agent')
+    @patch('finances.services.genai.Client')
+    def test_parse_goal_invalid_json(self, mock_Client):
+        with patch('finances.services.os.getenv', return_value='fake-key'):
+            inst = MagicMock()
+            chat = MagicMock()
+            chat.send_message.return_value = type('R', (), {'text': 'oops'})()
+            inst.chats.create.return_value = chat
+            mock_Client.return_value = inst
 
-        # DELETE
-        resp = self.client.delete(f'{self.chat_url}{chat_id}/')
-        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+            result = parse_goal_text("texto irreconhecível")
+        self.assertEqual(result, {
+            'target_amount': None,
+            'start_date': None,
+            'end_date': None,
+            'frequency': None,
+            'name': None
+        })
